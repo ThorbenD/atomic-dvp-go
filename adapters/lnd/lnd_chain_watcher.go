@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/liquidityos/atomic-dvp-go/domain"
-	"github.com/liquidityos/atomic-dvp-go/settlement"
+	"github.com/ThorbenD/atomic-dvp-go/domain"
+	"github.com/ThorbenD/atomic-dvp-go/settlement"
 )
 
 // LndChainWatcher implements settlement.ChainWatcher using LND.

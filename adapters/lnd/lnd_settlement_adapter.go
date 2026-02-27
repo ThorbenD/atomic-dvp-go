@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/liquidityos/atomic-dvp-go/settlement"
+	"github.com/ThorbenD/atomic-dvp-go/settlement"
 )
 
 // LndSettlementAdapter implements settlement.SettlementDriver using the existing

@@ -3,7 +3,7 @@ package settlement
 import (
 	"context"
 
-	"github.com/liquidityos/atomic-dvp-go/domain"
+	"github.com/ThorbenD/atomic-dvp-go/domain"
 )
 
 // ChainWatcher defines the interface for monitoring the blockchain

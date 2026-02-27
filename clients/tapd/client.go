@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/liquidityos/atomic-dvp-go/domain"
+	"github.com/ThorbenD/atomic-dvp-go/domain"
 
 	"github.com/lightninglabs/taproot-assets/taprpc"
 	"github.com/lightninglabs/taproot-assets/taprpc/assetwalletrpc"

@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/liquidityos/atomic-dvp-go/settlement"
+	"github.com/ThorbenD/atomic-dvp-go/settlement"
 )
 
 // MockSettlementAdapter implements settlement.SettlementDriver for testing and demos.

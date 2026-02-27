@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/liquidityos/atomic-dvp-go/settlement"
+	"github.com/ThorbenD/atomic-dvp-go/settlement"
 
 	"github.com/lightningnetwork/lnd/lnrpc"
 	"github.com/lightningnetwork/lnd/lnrpc/chainrpc"

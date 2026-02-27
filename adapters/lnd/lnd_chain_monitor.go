@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/liquidityos/atomic-dvp-go/settlement"
+	"github.com/ThorbenD/atomic-dvp-go/settlement"
 )
 
 // LndChainMonitor implements the ChainMonitor interface using LND.

@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/liquidityos/atomic-dvp-go/domain"
+	"github.com/ThorbenD/atomic-dvp-go/domain"
 )
 
 // MockChainWatcher implements settlement.ChainWatcher for testing/dev

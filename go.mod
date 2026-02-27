@@ -1,4 +1,4 @@
-module github.com/liquidityos/atomic-dvp-go
+module github.com/ThorbenD/atomic-dvp-go
 
 go 1.25.5
 

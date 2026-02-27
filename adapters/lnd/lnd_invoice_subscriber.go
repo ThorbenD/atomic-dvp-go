@@ -5,7 +5,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/liquidityos/atomic-dvp-go/settlement"
+	"github.com/ThorbenD/atomic-dvp-go/settlement"
 )
 
 // DepositHandler is the interface that the subscriber calls when a deposit is detected.

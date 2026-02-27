@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/liquidityos/atomic-dvp-go/adapters/mock"
-	"github.com/liquidityos/atomic-dvp-go/settlement"
+	"github.com/ThorbenD/atomic-dvp-go/adapters/mock"
+	"github.com/ThorbenD/atomic-dvp-go/settlement"
 )
 
 func main() {
