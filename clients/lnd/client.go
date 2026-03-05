@@ -65,9 +65,9 @@ func NewClient(cfg Config) (*Client, error) {
 		grpc.WithPerRPCCredentials(macCreds),
 	}
 
-	conn, err := grpc.Dial(cfg.Host, opts...)
+	conn, err := grpc.NewClient(cfg.Host, opts...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to dial LND: %v", err)
+		return nil, fmt.Errorf("failed to connect to LND: %v", err)
 	}
 
 	return &Client{

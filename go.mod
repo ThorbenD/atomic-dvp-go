@@ -185,3 +185,5 @@ require (
 )
 
 replace github.com/lightninglabs/taproot-assets v0.5.0 => github.com/lightninglabs/taproot-assets/taprpc v1.0.12
+
+replace google.golang.org/protobuf => github.com/lightninglabs/protobuf-go-hex-display v1.30.0-hex-display
