@@ -243,7 +243,7 @@ func (c *Client) SubscribeInvoices(ctx context.Context) (<-chan *settlement.Invo
 			updateChan <- &settlement.InvoiceUpdate{
 				Hash:  hex.EncodeToString(invoice.RHash),
 				State: state,
-				Amt:   uint64(invoice.Value),
+				Amt:   uint64(invoice.AmtPaidSat), // TD-48: use actual paid amount, not requested
 			}
 		}
 	}()
