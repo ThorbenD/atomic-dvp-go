@@ -16,6 +16,12 @@ import (
 	"gopkg.in/macaroon.v2"
 )
 
+// ChannelSender is the interface for sending assets via Lightning channels.
+// Implemented by ChannelClient; can be mocked for testing.
+type ChannelSender interface {
+	SendAssetViaChannel(ctx context.Context, req ChannelSendRequest) (*ChannelSendResult, error)
+}
+
 // ChannelClient wraps the tapd gRPC channel service
 // for off-chain Taproot Asset transfers via Lightning channels.
 type ChannelClient struct {

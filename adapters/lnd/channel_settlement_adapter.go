@@ -17,7 +17,7 @@ import (
 // enabling true atomic DvP with millisecond settlement.
 type ChannelSettlementAdapter struct {
 	lndClient     settlement.LightningClient
-	channelClient *tapd.ChannelClient
+	channelClient tapd.ChannelSender
 	chainWatcher  settlement.ChainWatcher
 
 	mu      sync.Mutex
@@ -27,7 +27,7 @@ type ChannelSettlementAdapter struct {
 func NewChannelSettlementAdapter(
 	chainWatcher settlement.ChainWatcher,
 	lndClient settlement.LightningClient,
-	channelClient *tapd.ChannelClient,
+	channelClient tapd.ChannelSender,
 ) *ChannelSettlementAdapter {
 	return &ChannelSettlementAdapter{
 		lndClient:     lndClient,
