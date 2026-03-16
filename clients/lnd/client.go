@@ -297,7 +297,7 @@ func (c *Client) SubscribeSingleInvoice(ctx context.Context, hash string) (<-cha
 			updateChan <- &settlement.InvoiceUpdate{
 				Hash:  hex.EncodeToString(invoice.RHash),
 				State: state,
-				Amt:   uint64(invoice.Value),
+				Amt:   uint64(invoice.AmtPaidSat),
 			}
 
 			// If settled or canceled, we can stop? No, stream stays open?
