@@ -20,109 +20,108 @@ func makeUpdateChannels() (chan *settlement.InvoiceUpdate, chan error) {
 	return make(chan *settlement.InvoiceUpdate, 4), make(chan error, 1)
 }
 
-func TestLndChainWatcher_DetectHTLC_Accepted(t *testing.T) {
-	mockClient := &MockLightningClient{}
-	updateCh, errCh := makeUpdateChannels()
+// TestLndChainWatcher_DetectHTLC exercises the full state-machine of DetectHTLC
+// via a table of scenarios, each with its own update sequence.
+func TestLndChainWatcher_DetectHTLC(t *testing.T) {
+	type result struct {
+		status domain.HTLCStatus
+		amount uint64
+	}
 
-	updateCh <- &settlement.InvoiceUpdate{Hash: testHash, State: settlement.InvoiceStateAccepted, Amt: 50_000}
+	tests := []struct {
+		name            string
+		updates         []*settlement.InvoiceUpdate
+		streamErr       error
+		closeUpdates    bool
+		wantResult      *result // nil means an error is expected
+		wantErrContains string
+	}{
+		{
+			name: "accepted immediately",
+			updates: []*settlement.InvoiceUpdate{
+				{Hash: testHash, State: settlement.InvoiceStateAccepted, Amt: 50_000},
+			},
+			wantResult: &result{domain.HTLCStatusConfirmed, 50_000},
+		},
+		{
+			name: "open then accepted",
+			updates: []*settlement.InvoiceUpdate{
+				{Hash: testHash, State: settlement.InvoiceStateOpen, Amt: 0},
+				{Hash: testHash, State: settlement.InvoiceStateAccepted, Amt: 60_000},
+			},
+			wantResult: &result{domain.HTLCStatusConfirmed, 60_000},
+		},
+		{
+			name: "settled",
+			updates: []*settlement.InvoiceUpdate{
+				{Hash: testHash, State: settlement.InvoiceStateSettled, Amt: 55_000},
+			},
+			wantResult: &result{domain.HTLCStatusClaimed, 55_000},
+		},
+		{
+			name: "canceled",
+			updates: []*settlement.InvoiceUpdate{
+				{Hash: testHash, State: settlement.InvoiceStateCanceled},
+			},
+			wantErrContains: "canceled",
+		},
+		{
+			name:            "stream error",
+			streamErr:       fmt.Errorf("rpc error: stream broken"),
+			wantErrContains: "stream error",
+		},
+		{
+			name:            "channel closed",
+			closeUpdates:    true,
+			wantErrContains: "closed",
+		},
+		{
+			name:            "subscribe fails",
+			wantErrContains: "subscribe invoice failed",
+		},
+	}
 
-	mockClient.On("SubscribeSingleInvoice", mock.Anything, testHash).
-		Return((<-chan *settlement.InvoiceUpdate)(updateCh), (<-chan error)(errCh), nil)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			mockClient := &MockLightningClient{}
+			updateCh, errCh := makeUpdateChannels()
 
-	watcher := adapterlnd.NewLndChainWatcher(mockClient)
-	htlc, err := watcher.DetectHTLC(context.Background(), testHash)
+			for _, u := range tc.updates {
+				updateCh <- u
+			}
+			if tc.streamErr != nil {
+				errCh <- tc.streamErr
+			}
+			if tc.closeUpdates {
+				close(updateCh)
+			}
 
-	require.NoError(t, err)
-	assert.Equal(t, testHash, htlc.Hash)
-	assert.Equal(t, uint64(50_000), htlc.Amount)
-	assert.Equal(t, domain.HTLCStatusConfirmed, htlc.Status)
-	mockClient.AssertExpectations(t)
+			if tc.name == "subscribe fails" {
+				mockClient.On("SubscribeSingleInvoice", mock.Anything, testHash).
+					Return(nil, nil, fmt.Errorf("connection refused"))
+			} else {
+				mockClient.On("SubscribeSingleInvoice", mock.Anything, testHash).
+					Return((<-chan *settlement.InvoiceUpdate)(updateCh), (<-chan error)(errCh), nil)
+			}
+
+			watcher := adapterlnd.NewLndChainWatcher(mockClient)
+			htlc, err := watcher.DetectHTLC(context.Background(), testHash)
+
+			if tc.wantResult != nil {
+				require.NoError(t, err)
+				assert.Equal(t, tc.wantResult.status, htlc.Status)
+				assert.Equal(t, tc.wantResult.amount, htlc.Amount)
+			} else {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tc.wantErrContains)
+			}
+			mockClient.AssertExpectations(t)
+		})
+	}
 }
 
-func TestLndChainWatcher_DetectHTLC_OpenThenAccepted(t *testing.T) {
-	mockClient := &MockLightningClient{}
-	updateCh, errCh := makeUpdateChannels()
-
-	updateCh <- &settlement.InvoiceUpdate{Hash: testHash, State: settlement.InvoiceStateOpen, Amt: 0}
-	updateCh <- &settlement.InvoiceUpdate{Hash: testHash, State: settlement.InvoiceStateAccepted, Amt: 60_000}
-
-	mockClient.On("SubscribeSingleInvoice", mock.Anything, testHash).
-		Return((<-chan *settlement.InvoiceUpdate)(updateCh), (<-chan error)(errCh), nil)
-
-	watcher := adapterlnd.NewLndChainWatcher(mockClient)
-	htlc, err := watcher.DetectHTLC(context.Background(), testHash)
-
-	require.NoError(t, err)
-	assert.Equal(t, uint64(60_000), htlc.Amount)
-	assert.Equal(t, domain.HTLCStatusConfirmed, htlc.Status)
-}
-
-func TestLndChainWatcher_DetectHTLC_Settled(t *testing.T) {
-	mockClient := &MockLightningClient{}
-	updateCh, errCh := makeUpdateChannels()
-
-	updateCh <- &settlement.InvoiceUpdate{Hash: testHash, State: settlement.InvoiceStateSettled, Amt: 55_000}
-
-	mockClient.On("SubscribeSingleInvoice", mock.Anything, testHash).
-		Return((<-chan *settlement.InvoiceUpdate)(updateCh), (<-chan error)(errCh), nil)
-
-	watcher := adapterlnd.NewLndChainWatcher(mockClient)
-	htlc, err := watcher.DetectHTLC(context.Background(), testHash)
-
-	require.NoError(t, err)
-	assert.Equal(t, domain.HTLCStatusClaimed, htlc.Status)
-	assert.Equal(t, uint64(55_000), htlc.Amount)
-}
-
-func TestLndChainWatcher_DetectHTLC_Canceled(t *testing.T) {
-	mockClient := &MockLightningClient{}
-	updateCh, errCh := makeUpdateChannels()
-
-	updateCh <- &settlement.InvoiceUpdate{Hash: testHash, State: settlement.InvoiceStateCanceled}
-
-	mockClient.On("SubscribeSingleInvoice", mock.Anything, testHash).
-		Return((<-chan *settlement.InvoiceUpdate)(updateCh), (<-chan error)(errCh), nil)
-
-	watcher := adapterlnd.NewLndChainWatcher(mockClient)
-	_, err := watcher.DetectHTLC(context.Background(), testHash)
-
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "canceled")
-}
-
-func TestLndChainWatcher_DetectHTLC_StreamError(t *testing.T) {
-	mockClient := &MockLightningClient{}
-	updateCh, errCh := makeUpdateChannels()
-
-	errCh <- fmt.Errorf("rpc error: stream broken")
-
-	mockClient.On("SubscribeSingleInvoice", mock.Anything, testHash).
-		Return((<-chan *settlement.InvoiceUpdate)(updateCh), (<-chan error)(errCh), nil)
-
-	watcher := adapterlnd.NewLndChainWatcher(mockClient)
-	_, err := watcher.DetectHTLC(context.Background(), testHash)
-
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "stream error")
-}
-
-func TestLndChainWatcher_DetectHTLC_ChannelClosed(t *testing.T) {
-	mockClient := &MockLightningClient{}
-	updateCh, errCh := makeUpdateChannels()
-
-	// Close both channels immediately
-	close(updateCh)
-
-	mockClient.On("SubscribeSingleInvoice", mock.Anything, testHash).
-		Return((<-chan *settlement.InvoiceUpdate)(updateCh), (<-chan error)(errCh), nil)
-
-	watcher := adapterlnd.NewLndChainWatcher(mockClient)
-	_, err := watcher.DetectHTLC(context.Background(), testHash)
-
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "closed")
-}
-
+// TestLndChainWatcher_DetectHTLC_ContextCancel is kept separate because it
+// requires a goroutine to cancel the context mid-flight.
 func TestLndChainWatcher_DetectHTLC_ContextCancel(t *testing.T) {
 	mockClient := &MockLightningClient{}
 	updateCh := make(chan *settlement.InvoiceUpdate) // never receives
@@ -141,19 +140,6 @@ func TestLndChainWatcher_DetectHTLC_ContextCancel(t *testing.T) {
 	_, err := watcher.DetectHTLC(ctx, testHash)
 
 	assert.ErrorIs(t, err, context.Canceled)
-}
-
-func TestLndChainWatcher_DetectHTLC_SubscribeError(t *testing.T) {
-	mockClient := &MockLightningClient{}
-
-	mockClient.On("SubscribeSingleInvoice", mock.Anything, testHash).
-		Return(nil, nil, fmt.Errorf("connection refused"))
-
-	watcher := adapterlnd.NewLndChainWatcher(mockClient)
-	_, err := watcher.DetectHTLC(context.Background(), testHash)
-
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "subscribe invoice failed")
 }
 
 func TestLndChainWatcher_ClaimHTLC_Success(t *testing.T) {

@@ -1,0 +1,41 @@
+version: "2"
+
+linters:
+  enable:
+    - errcheck      # unhandled errors
+    - govet         # correctness checks
+    - staticcheck   # static analysis
+    - gosimple      # simplification suggestions
+    - ineffassign   # ineffective assignments
+    - unused        # unused code
+    - gofmt         # formatting
+    - gosec         # security issues
+    - unparam       # unused function parameters
+    - misspell      # spelling mistakes in comments/strings
+    - godot         # comments should end with a period
+    - noctx         # http requests without context
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+  gosec:
+    excludes:
+      - G115  # integer overflow conversion (common in btcd/lnd code)
+  godot:
+    scope: declarations
+
+issues:
+  exclude-rules:
+    # Test files: relax some rules
+    - path: "_test\\.go"
+      linters:
+        - gosec
+        - unparam
+        - godot
+    # Generated or example code
+    - path: "examples/"
+      linters:
+        - errcheck
+        - gosec
+  max-issues-per-linter: 50
+  max-same-issues: 10
