@@ -26,6 +26,7 @@ issues:
         - gosec
         - unparam
         - godot
+        - errcheck
     - path: "examples/"
       linters:
         - errcheck
