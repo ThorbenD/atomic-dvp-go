@@ -85,7 +85,7 @@ func (s *LndInvoiceSubscriber) subscribeLoop(ctx context.Context) {
 
 				if update.State == settlement.InvoiceStateAccepted {
 					go func(hash string) {
-						// Use a timeout so a slow or stuck handler cannot leak this goroutine.
+// Use a timeout so a slow or stuck handler cannot leak this goroutine.
 						callCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 						defer cancel()
 						if err := s.handler.OnDepositDetected(callCtx, hash); err != nil {
