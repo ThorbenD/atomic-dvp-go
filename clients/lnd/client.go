@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/ThorbenD/atomic-dvp-go/settlement"
@@ -28,14 +29,32 @@ type Client struct {
 	walletClient        walletrpc.WalletKitClient
 	chainNotifierClient chainrpc.ChainNotifierClient
 	conn                *grpc.ClientConn
+	defaults            InvoiceDefaults
+}
+
+// InvoiceDefaults holds configurable parameters for hold invoice creation.
+type InvoiceDefaults struct {
+	ExpirySeconds   int64  // How long the invoice is valid (default: 3600)
+	CltvExpiry      uint32 // CLTV delta blocks (default: 40)
+	FeeRateSatVbyte uint64 // On-chain fee rate in sat/vbyte (default: 1)
+}
+
+// DefaultInvoiceDefaults returns sensible defaults for invoice creation.
+func DefaultInvoiceDefaults() InvoiceDefaults {
+	return InvoiceDefaults{
+		ExpirySeconds:   3600,
+		CltvExpiry:      40,
+		FeeRateSatVbyte: 1,
+	}
 }
 
 // Config holds connection configuration.
 type Config struct {
-	Host         string
-	TLSCertPath  string
-	MacaroonPath string
-	Network      string
+	Host            string
+	TLSCertPath     string
+	MacaroonPath    string
+	Network         string
+	InvoiceDefaults InvoiceDefaults // Configurable invoice parameters; use DefaultInvoiceDefaults() if zero-value
 }
 
 // NewClient creates a new LND client.
@@ -70,6 +89,11 @@ func NewClient(cfg Config) (*Client, error) {
 		return nil, fmt.Errorf("failed to connect to LND: %v", err)
 	}
 
+	defaults := cfg.InvoiceDefaults
+	if defaults.ExpirySeconds == 0 {
+		defaults = DefaultInvoiceDefaults()
+	}
+
 	return &Client{
 		lnClient:            lnrpc.NewLightningClient(conn),
 		routerClient:        routerrpc.NewRouterClient(conn),
@@ -77,6 +101,7 @@ func NewClient(cfg Config) (*Client, error) {
 		walletClient:        walletrpc.NewWalletKitClient(conn),
 		chainNotifierClient: chainrpc.NewChainNotifierClient(conn),
 		conn:                conn,
+		defaults:            defaults,
 	}, nil
 }
 
@@ -110,8 +135,8 @@ func (c *Client) AddHoldInvoice(ctx context.Context, memo string, hash string, v
 		Memo:       memo,
 		Hash:       hashBytes,
 		Value:      int64(val),
-		Expiry:     3600, // 1 hour
-		CltvExpiry: 40,
+		Expiry:     c.defaults.ExpirySeconds,
+		CltvExpiry: c.defaults.CltvExpiry,
 	}
 
 	resp, err := c.invoicesClient.AddHoldInvoice(ctx, req)
@@ -160,7 +185,7 @@ func (c *Client) StartInterceptor(ctx context.Context, handler func(settlement.H
 		return fmt.Errorf("failed to create interceptor stream: %v", err)
 	}
 
-	fmt.Println("LND Interceptor started. Waiting for HTLCs...")
+	slog.Info("⚡ [LND] Interceptor started, waiting for HTLCs...")
 
 	for {
 		request, err := stream.Recv()
@@ -227,23 +252,22 @@ func (c *Client) SubscribeInvoices(ctx context.Context) (<-chan *settlement.Invo
 				return
 			}
 
-			// Map State
-			var state string
+			var state settlement.InvoiceState
 			switch invoice.State {
 			case lnrpc.Invoice_OPEN:
-				state = "OPEN"
+				state = settlement.InvoiceStateOpen
 			case lnrpc.Invoice_SETTLED:
-				state = "SETTLED"
+				state = settlement.InvoiceStateSettled
 			case lnrpc.Invoice_CANCELED:
-				state = "CANCELED"
+				state = settlement.InvoiceStateCanceled
 			case lnrpc.Invoice_ACCEPTED:
-				state = "ACCEPTED"
+				state = settlement.InvoiceStateAccepted
 			}
 
 			updateChan <- &settlement.InvoiceUpdate{
 				Hash:  hex.EncodeToString(invoice.RHash),
 				State: state,
-				Amt:   uint64(invoice.AmtPaidSat), // TD-48: use actual paid amount, not requested
+				Amt:   uint64(invoice.AmtPaidSat),
 			}
 		}
 	}()
@@ -281,17 +305,16 @@ func (c *Client) SubscribeSingleInvoice(ctx context.Context, hash string) (<-cha
 				return
 			}
 
-			// Map State
-			var state string
+			var state settlement.InvoiceState
 			switch invoice.State {
 			case lnrpc.Invoice_OPEN:
-				state = "OPEN"
+				state = settlement.InvoiceStateOpen
 			case lnrpc.Invoice_SETTLED:
-				state = "SETTLED"
+				state = settlement.InvoiceStateSettled
 			case lnrpc.Invoice_CANCELED:
-				state = "CANCELED"
+				state = settlement.InvoiceStateCanceled
 			case lnrpc.Invoice_ACCEPTED:
-				state = "ACCEPTED"
+				state = settlement.InvoiceStateAccepted
 			}
 
 			updateChan <- &settlement.InvoiceUpdate{
@@ -300,10 +323,9 @@ func (c *Client) SubscribeSingleInvoice(ctx context.Context, hash string) (<-cha
 				Amt:   uint64(invoice.AmtPaidSat),
 			}
 
-			// If settled or canceled, we can stop? No, stream stays open?
-			// SubscribeSingleInvoice typically streams updates.
-			// Ideally we close when settled/canceled to leak goroutines.
-			if state == "SETTLED" || state == "CANCELED" {
+			// Terminate the goroutine once the invoice has reached a terminal state
+			// to prevent goroutine leaks.
+			if state == settlement.InvoiceStateSettled || state == settlement.InvoiceStateCanceled {
 				return
 			}
 		}
@@ -321,7 +343,7 @@ func (c *Client) FundPsbt(ctx context.Context, outputs map[string]uint64) (strin
 			},
 		},
 		Fees: &walletrpc.FundPsbtRequest_SatPerVbyte{
-			SatPerVbyte: 1, // Default low fee for regression test
+			SatPerVbyte: c.defaults.FeeRateSatVbyte,
 		},
 	}
 
@@ -329,9 +351,6 @@ func (c *Client) FundPsbt(ctx context.Context, outputs map[string]uint64) (strin
 	if err != nil {
 		return "", 0, fmt.Errorf("failed to fund PSBT: %w", err)
 	}
-
-	psbtBytes, err := os.ReadFile("debug_funded.psbt") // Optional debug
-	_ = psbtBytes
 
 	return string(resp.FundedPsbt), resp.ChangeOutputIndex, nil
 }
@@ -353,7 +372,7 @@ func (c *Client) FundPsbtFromTemplate(ctx context.Context, packet string, output
 			Psbt: packetBytes,
 		},
 		Fees: &walletrpc.FundPsbtRequest_SatPerVbyte{
-			SatPerVbyte: 1,
+			SatPerVbyte: c.defaults.FeeRateSatVbyte,
 		},
 	}
 

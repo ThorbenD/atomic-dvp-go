@@ -10,13 +10,20 @@ import (
 	"github.com/ThorbenD/atomic-dvp-go/settlement"
 )
 
+// invoiceClient is the minimal interface LndChainWatcher needs from LND:
+// subscribing to a single invoice and settling it with a preimage.
+type invoiceClient interface {
+	settlement.InvoiceSubscriber
+	settlement.InvoiceManager
+}
+
 // LndChainWatcher implements settlement.ChainWatcher using LND.
 type LndChainWatcher struct {
-	client settlement.LightningClient
+	client invoiceClient
 }
 
 // NewLndChainWatcher creates a new LND-based chain watcher.
-func NewLndChainWatcher(client settlement.LightningClient) *LndChainWatcher {
+func NewLndChainWatcher(client invoiceClient) *LndChainWatcher {
 	return &LndChainWatcher{
 		client: client,
 	}
@@ -24,7 +31,6 @@ func NewLndChainWatcher(client settlement.LightningClient) *LndChainWatcher {
 
 // DetectHTLC waits for the invoice to reach the ACCEPTED state (Held).
 func (w *LndChainWatcher) DetectHTLC(ctx context.Context, paymentHash string) (*domain.HTLC, error) {
-	// Subscribe to invoice updates
 	updateChan, errChan, err := w.client.SubscribeSingleInvoice(ctx, paymentHash)
 	if err != nil {
 		return nil, fmt.Errorf("subscribe invoice failed: %w", err)
@@ -43,18 +49,17 @@ func (w *LndChainWatcher) DetectHTLC(ctx context.Context, paymentHash string) (*
 				return nil, fmt.Errorf("stream closed unexpectedly")
 			}
 
-			// Map LND State to Domain State
 			switch update.State {
-			case "ACCEPTED":
+			case settlement.InvoiceStateAccepted:
 				slog.Info("⚡ [LND] Invoice ACCEPTED (Locked)", "hash", paymentHash, "amt", update.Amt)
 				return &domain.HTLC{
 					Hash:       paymentHash,
-					Amount:     update.Amt, // Satoshis
+					Amount:     update.Amt,
 					Status:     domain.HTLCStatusConfirmed,
-					DetectedAt: time.Now(), // Assuming we want current time, or we could add it to InvoiceUpdate if needed
+					DetectedAt: time.Now(),
 				}, nil
 
-			case "SETTLED":
+			case settlement.InvoiceStateSettled:
 				slog.Info("⚡ [LND] Invoice already SETTLED", "hash", paymentHash)
 				return &domain.HTLC{
 					Hash:   paymentHash,
@@ -62,10 +67,10 @@ func (w *LndChainWatcher) DetectHTLC(ctx context.Context, paymentHash string) (*
 					Status: domain.HTLCStatusClaimed,
 				}, nil
 
-			case "CANCELED":
+			case settlement.InvoiceStateCanceled:
 				return nil, fmt.Errorf("invoice canceled")
 			}
-			// If OPEN, continue loop
+			// InvoiceStateOpen: continue waiting
 		}
 	}
 }

@@ -24,7 +24,7 @@ func TestLndChainWatcher_DetectHTLC_Accepted(t *testing.T) {
 	mockClient := &MockLightningClient{}
 	updateCh, errCh := makeUpdateChannels()
 
-	updateCh <- &settlement.InvoiceUpdate{Hash: testHash, State: "ACCEPTED", Amt: 50_000}
+	updateCh <- &settlement.InvoiceUpdate{Hash: testHash, State: settlement.InvoiceStateAccepted, Amt: 50_000}
 
 	mockClient.On("SubscribeSingleInvoice", mock.Anything, testHash).
 		Return((<-chan *settlement.InvoiceUpdate)(updateCh), (<-chan error)(errCh), nil)
@@ -43,8 +43,8 @@ func TestLndChainWatcher_DetectHTLC_OpenThenAccepted(t *testing.T) {
 	mockClient := &MockLightningClient{}
 	updateCh, errCh := makeUpdateChannels()
 
-	updateCh <- &settlement.InvoiceUpdate{Hash: testHash, State: "OPEN", Amt: 0}
-	updateCh <- &settlement.InvoiceUpdate{Hash: testHash, State: "ACCEPTED", Amt: 60_000}
+	updateCh <- &settlement.InvoiceUpdate{Hash: testHash, State: settlement.InvoiceStateOpen, Amt: 0}
+	updateCh <- &settlement.InvoiceUpdate{Hash: testHash, State: settlement.InvoiceStateAccepted, Amt: 60_000}
 
 	mockClient.On("SubscribeSingleInvoice", mock.Anything, testHash).
 		Return((<-chan *settlement.InvoiceUpdate)(updateCh), (<-chan error)(errCh), nil)
@@ -61,7 +61,7 @@ func TestLndChainWatcher_DetectHTLC_Settled(t *testing.T) {
 	mockClient := &MockLightningClient{}
 	updateCh, errCh := makeUpdateChannels()
 
-	updateCh <- &settlement.InvoiceUpdate{Hash: testHash, State: "SETTLED", Amt: 55_000}
+	updateCh <- &settlement.InvoiceUpdate{Hash: testHash, State: settlement.InvoiceStateSettled, Amt: 55_000}
 
 	mockClient.On("SubscribeSingleInvoice", mock.Anything, testHash).
 		Return((<-chan *settlement.InvoiceUpdate)(updateCh), (<-chan error)(errCh), nil)
@@ -78,7 +78,7 @@ func TestLndChainWatcher_DetectHTLC_Canceled(t *testing.T) {
 	mockClient := &MockLightningClient{}
 	updateCh, errCh := makeUpdateChannels()
 
-	updateCh <- &settlement.InvoiceUpdate{Hash: testHash, State: "CANCELED"}
+	updateCh <- &settlement.InvoiceUpdate{Hash: testHash, State: settlement.InvoiceStateCanceled}
 
 	mockClient.On("SubscribeSingleInvoice", mock.Anything, testHash).
 		Return((<-chan *settlement.InvoiceUpdate)(updateCh), (<-chan error)(errCh), nil)

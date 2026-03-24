@@ -6,14 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 
 	"github.com/lightninglabs/taproot-assets/taprpc/tapchannelrpc"
 	"github.com/lightningnetwork/lnd/lnrpc"
 	"github.com/lightningnetwork/lnd/lnrpc/routerrpc"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-	"gopkg.in/macaroon.v2"
 )
 
 // ChannelSender is the interface for sending assets via Lightning channels.
@@ -31,32 +28,9 @@ type ChannelClient struct {
 
 // NewChannelClient creates a new channel client for tapd.
 func NewChannelClient(cfg Config) (*ChannelClient, error) {
-	// Load TLS cert
-	creds, err := credentials.NewClientTLSFromFile(cfg.TLSCertPath, "")
+	conn, err := newGRPCConn(cfg.Host, cfg.TLSCertPath, cfg.MacaroonPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load TLS cert: %w", err)
-	}
-
-	// Load Macaroon
-	macBytes, err := os.ReadFile(cfg.MacaroonPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read macaroon: %w", err)
-	}
-	mac := &macaroon.Macaroon{}
-	if err := mac.UnmarshalBinary(macBytes); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal macaroon: %w", err)
-	}
-
-	macCreds := NewMacaroonCredential(mac)
-
-	opts := []grpc.DialOption{
-		grpc.WithTransportCredentials(creds),
-		grpc.WithPerRPCCredentials(macCreds),
-	}
-
-	conn, err := grpc.NewClient(cfg.Host, opts...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to tapd: %w", err)
+		return nil, err
 	}
 
 	return &ChannelClient{
@@ -84,6 +58,20 @@ type ChannelSendResult struct {
 	Preimage string
 }
 
+// ChannelDefaults holds configurable routing parameters for channel payments.
+type ChannelDefaults struct {
+	TimeoutSeconds int32
+	FeeLimitMsat   int64
+}
+
+// DefaultChannelDefaults returns sensible defaults for channel payments.
+func DefaultChannelDefaults() ChannelDefaults {
+	return ChannelDefaults{
+		TimeoutSeconds: 60,
+		FeeLimitMsat:   10_000,
+	}
+}
+
 // SendAssetViaChannel initiates an off-chain asset transfer
 // through an existing Lightning channel using HTLC semantics.
 // Settlement time: milliseconds (vs ~10 minutes on-chain).
@@ -91,7 +79,23 @@ func (c *ChannelClient) SendAssetViaChannel(
 	ctx context.Context,
 	req ChannelSendRequest,
 ) (*ChannelSendResult, error) {
+	return c.sendAssetViaChannel(ctx, req, DefaultChannelDefaults())
+}
 
+// SendAssetViaChannelWithDefaults allows callers to override routing defaults.
+func (c *ChannelClient) SendAssetViaChannelWithDefaults(
+	ctx context.Context,
+	req ChannelSendRequest,
+	defaults ChannelDefaults,
+) (*ChannelSendResult, error) {
+	return c.sendAssetViaChannel(ctx, req, defaults)
+}
+
+func (c *ChannelClient) sendAssetViaChannel(
+	ctx context.Context,
+	req ChannelSendRequest,
+	defaults ChannelDefaults,
+) (*ChannelSendResult, error) {
 	assetIDBytes, err := hex.DecodeString(req.AssetID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid asset ID: %w", err)
@@ -107,7 +111,6 @@ func (c *ChannelClient) SendAssetViaChannel(
 		return nil, fmt.Errorf("invalid payment hash: %w", err)
 	}
 
-	// Create the request
 	sendReq := &tapchannelrpc.SendPaymentRequest{
 		AssetId:     assetIDBytes,
 		AssetAmount: req.Amount,
@@ -116,8 +119,8 @@ func (c *ChannelClient) SendAssetViaChannel(
 			Dest:           peerPubkeyBytes,
 			PaymentHash:    paymentHashBytes,
 			PaymentAddr:    req.PaymentAddr,
-			TimeoutSeconds: 60, // Reasonable timeout
-			FeeLimitMsat:   10000,
+			TimeoutSeconds: defaults.TimeoutSeconds,
+			FeeLimitMsat:   defaults.FeeLimitMsat,
 		},
 	}
 
@@ -126,7 +129,6 @@ func (c *ChannelClient) SendAssetViaChannel(
 		return nil, fmt.Errorf("failed to initiate SendPayment stream: %w", err)
 	}
 
-	// Consume the stream to wait for settlement
 	for {
 		resp, err := stream.Recv()
 		if err == io.EOF {
@@ -140,7 +142,6 @@ func (c *ChannelClient) SendAssetViaChannel(
 			paymentResult := resp.GetPaymentResult()
 
 			switch paymentResult.Status {
-			// lnrpc.Payment_SUCCEEDED = 2
 			case lnrpc.Payment_SUCCEEDED:
 				return &ChannelSendResult{
 					Preimage: paymentResult.PaymentPreimage,
@@ -152,8 +153,6 @@ func (c *ChannelClient) SendAssetViaChannel(
 		}
 
 		if resp.GetAcceptedSellOrder() != nil {
-			// We received an RFQ sell order acceptance.
-			// The payment will proceed, so we continue listening to the stream.
 			continue
 		}
 	}

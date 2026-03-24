@@ -56,48 +56,44 @@ func (m *MockChainWatcher) SimulateIncomingHTLC(hash string, amount uint64) {
 	m.transactions[hash] = &domain.HTLC{
 		Hash:       hash,
 		Amount:     amount,
-		Expiry:     0, // Mock: not relevant yet
+		Expiry:     0,
 		Status:     domain.HTLCStatusConfirmed,
 		DetectedAt: time.Now(),
 	}
 	slog.Info("⛓️  [MockChain] Simulated incoming HTLC", "hash", hash)
 }
 
-// Helper to derive hash
-func toSha256(preimage string) string {
-	b, _ := hex.DecodeString(preimage) // Assuming valid hex
+// toSha256 derives a SHA256 hash from a hex-encoded preimage.
+func toSha256(preimage string) (string, error) {
+	b, err := hex.DecodeString(preimage)
+	if err != nil {
+		return "", fmt.Errorf("invalid preimage hex: %w", err)
+	}
 	hash := sha256.Sum256(b)
-	return hex.EncodeToString(hash[:])
+	return hex.EncodeToString(hash[:]), nil
 }
 
 func (m *MockChainWatcher) ClaimHTLC(ctx context.Context, preimage string) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// 1. Verify Preimage matches a known Hash
-	// Note: In a real system, we'd hash the preimage.
-	// For this Mock, if you stored the hash directly, we can try to derive it.
-	// Or just iterate to find a match if your map keys are hashes.
-
-	// Let's assume we implement a simple SHA256 check:
-	calculatedHash := toSha256(preimage)
+	calculatedHash, err := toSha256(preimage)
+	if err != nil {
+		return "", fmt.Errorf("claim HTLC: %w", err)
+	}
 
 	htlc, exists := m.transactions[calculatedHash]
 	if !exists {
-		// Fallback for testing if you used random hashes that aren't real preimages
-		// Use with caution or comment out for strict mode
-		slog.Warn("⚠️ [MockChain] Preimage verification failed, but checking direct mock injection...", "hash", calculatedHash)
 		return "", fmt.Errorf("HTLC with hash %s not found", calculatedHash)
 	}
 
-	if htlc.Status == "CLAIMED" {
+	if htlc.Status == domain.HTLCStatusClaimed {
 		return "", fmt.Errorf("HTLC already claimed")
 	}
 
-	// 2. "Sweep"
-	htlc.Status = "CLAIMED" // Update internal state
+	htlc.Status = domain.HTLCStatusClaimed
 	txID := "tx_mock_sweep_" + preimage[:8]
 
-	slog.Info("🧹 [MockChain] Sweeping HTLC!", "tx_id", txID, "preimage", preimage)
+	slog.Info("🧹 [MockChain] Sweeping HTLC!", "tx_id", txID)
 	return txID, nil
 }
