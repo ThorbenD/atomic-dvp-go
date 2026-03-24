@@ -35,7 +35,7 @@ type Client struct {
 // InvoiceDefaults holds configurable parameters for hold invoice creation.
 type InvoiceDefaults struct {
 	ExpirySeconds   int64  // How long the invoice is valid (default: 3600)
-	CltvExpiry      uint32 // CLTV delta blocks (default: 40)
+	CltvExpiry      uint64 // CLTV delta blocks (default: 40)
 	FeeRateSatVbyte uint64 // On-chain fee rate in sat/vbyte (default: 1)
 }
 
