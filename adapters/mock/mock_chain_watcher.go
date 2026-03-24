@@ -12,7 +12,7 @@ import (
 	"github.com/ThorbenD/atomic-dvp-go/domain"
 )
 
-// MockChainWatcher implements settlement.ChainWatcher for testing/dev
+// MockChainWatcher implements settlement.ChainWatcher for testing/dev.
 type MockChainWatcher struct {
 	mu           sync.RWMutex
 	transactions map[string]*domain.HTLC

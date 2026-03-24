@@ -35,12 +35,18 @@ func lndClientFromEnv(t *testing.T) *clientlnd.Client {
 	}
 	tlsCert := os.Getenv("LND_TLS_CERT")
 	if tlsCert == "" {
-		home, _ := os.UserHomeDir()
+		home, err := os.UserHomeDir()
+		if err != nil {
+			t.Skipf("cannot determine home dir: %v", err)
+		}
 		tlsCert = home + "/.lnd/tls.cert"
 	}
 	macaroon := os.Getenv("LND_MACAROON")
 	if macaroon == "" {
-		home, _ := os.UserHomeDir()
+		home, err := os.UserHomeDir()
+		if err != nil {
+			t.Skipf("cannot determine home dir: %v", err)
+		}
 		macaroon = home + "/.lnd/data/chain/bitcoin/regtest/admin.macaroon"
 	}
 
