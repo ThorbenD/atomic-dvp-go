@@ -1,26 +1,24 @@
+version: "2"
+
 linters:
   enable:
     - errcheck
     - govet
     - staticcheck
-    - gosimple
     - ineffassign
-    - unused
-    - gofmt
     - gosec
     - unparam
     - misspell
     - godot
     - noctx
-
-linters-settings:
-  errcheck:
-    check-type-assertions: true
-  gosec:
-    excludes:
-      - G115
-  godot:
-    scope: declarations
+  settings:
+    errcheck:
+      check-type-assertions: true
+    gosec:
+      excludes:
+        - G115
+    godot:
+      scope: declarations
 
 issues:
   exclude-rules:
