@@ -1,5 +1,3 @@
-version: "2"
-
 linters:
   enable:
     - errcheck
@@ -11,14 +9,15 @@ linters:
     - misspell
     - godot
     - noctx
-  settings:
-    errcheck:
-      check-type-assertions: true
-    gosec:
-      excludes:
-        - G115
-    godot:
-      scope: declarations
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+  gosec:
+    excludes:
+      - G115
+  godot:
+    scope: declarations
 
 issues:
   exclude-rules:
