@@ -24,7 +24,7 @@ func NewMockChainWatcher() *MockChainWatcher {
 	}
 }
 
-// DetectHTLC polls the internal map for the presence of a specific hash
+// DetectHTLC polls the internal map for the presence of a specific hash.
 func (m *MockChainWatcher) DetectHTLC(ctx context.Context, paymentHash string) (*domain.HTLC, error) {
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
@@ -48,7 +48,7 @@ func (m *MockChainWatcher) DetectHTLC(ctx context.Context, paymentHash string) (
 	}
 }
 
-// SimulateIncomingHTLC is a helper to manually trigger a "blockchain event"
+// SimulateIncomingHTLC is a helper to manually trigger a "blockchain event".
 func (m *MockChainWatcher) SimulateIncomingHTLC(hash string, amount uint64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
