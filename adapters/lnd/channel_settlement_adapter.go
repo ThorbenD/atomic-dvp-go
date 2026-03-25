@@ -67,6 +67,8 @@ func (a *ChannelSettlementAdapter) PrepareSettlement(
 		DriverType:     "HTLC_TAPROOT_CHANNEL",
 		PreparedAt:     time.Now(),
 		DepositAmtSats: htlc.Amount,
+		Preimage:       req.Preimage,
+		PaymentHash:    req.PaymentHash,
 	}, nil
 }
 
@@ -97,9 +99,7 @@ func (a *ChannelSettlementAdapter) ExecuteSettlement(
 		return nil, fmt.Errorf("invalid amount: must be positive, got %s", req.AssetAmount.String())
 	}
 
-	// Note: We use the SwapID which carries the preimage for execution, same as the fallback behavior
-	// In the regular adapter, `handle.SwapID` acts as preimage in `ClaimHTLC`.
-	preimage := handle.SwapID
+	preimage := handle.Preimage
 
 	sendReq := tapd.ChannelSendRequest{
 		AssetID:     req.AssetID,
@@ -145,8 +145,7 @@ func (a *ChannelSettlementAdapter) AbortSettlement(
 	delete(a.pending, handle.SwapID)
 	a.mu.Unlock()
 
-	// Like standard lnd adapter, we depend on canceling the invoice.
-	if err := a.lndClient.CancelInvoice(ctx, handle.SwapID); err != nil {
+	if err := a.lndClient.CancelInvoice(ctx, handle.PaymentHash); err != nil {
 		return fmt.Errorf("abort settlement failed: %w", err)
 	}
 

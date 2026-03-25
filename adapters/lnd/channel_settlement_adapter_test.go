@@ -17,7 +17,8 @@ import (
 )
 
 const (
-	channelSwapID      = "channel-preimage-hex-string-here"
+	channelSwapID      = "channel-swap-id-abc"
+	channelPreimage    = "channel-preimage-hex-string-here-32byte"
 	channelPaymentHash = "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef12"
 	testAssetID        = "deadbeefdeadbeefdeadbeefdeadbeef"
 	testPeerPubkey     = "021c1075c2e173ea3be32cfaeec528b1e4c70d47d0de0ba88a381cd29cb01e4a19"
@@ -53,6 +54,7 @@ func TestChannelSettlementAdapter_PrepareSettlement_Success(t *testing.T) {
 	req := settlement.SettlementRequest{
 		SwapID:      channelSwapID,
 		PaymentHash: channelPaymentHash,
+		Preimage:    channelPreimage,
 		AssetID:     testAssetID,
 		AssetAmount: decimal.NewFromFloat(0.01),
 		DestAddr:    testPeerPubkey,
@@ -62,6 +64,8 @@ func TestChannelSettlementAdapter_PrepareSettlement_Success(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, channelSwapID, handle.SwapID)
+	assert.Equal(t, channelPreimage, handle.Preimage)
+	assert.Equal(t, channelPaymentHash, handle.PaymentHash)
 	assert.Equal(t, "HTLC_TAPROOT_CHANNEL", handle.DriverType)
 	assert.Equal(t, uint64(50_000), handle.DepositAmtSats)
 	assert.Contains(t, handle.ID, channelPaymentHash[:16])
@@ -80,6 +84,7 @@ func TestChannelSettlementAdapter_PrepareSettlement_DetectError(t *testing.T) {
 	req := settlement.SettlementRequest{
 		SwapID:      channelSwapID,
 		PaymentHash: channelPaymentHash,
+		Preimage:    channelPreimage,
 	}
 
 	_, err := adapter.PrepareSettlement(context.Background(), req)
@@ -107,13 +112,14 @@ func TestChannelSettlementAdapter_ExecuteSettlement_Success(t *testing.T) {
 	mockChannel.On("SendAssetViaChannel", mock.Anything, expectedSendReq).
 		Return(&tapd.ChannelSendResult{Preimage: "abcdef1234567890abcdef12345678"}, nil)
 
-	mockWatcher.On("ClaimHTLC", mock.Anything, channelSwapID).
+	mockWatcher.On("ClaimHTLC", mock.Anything, channelPreimage).
 		Return("off-chain-settled", nil)
 
 	adapter := adapterlnd.NewChannelSettlementAdapter(mockWatcher, mockLnd, mockChannel)
 	req := settlement.SettlementRequest{
 		SwapID:      channelSwapID,
 		PaymentHash: channelPaymentHash,
+		Preimage:    channelPreimage,
 		AssetID:     testAssetID,
 		AssetAmount: decimal.NewFromFloat(0.01),
 		DestAddr:    testPeerPubkey,
@@ -138,8 +144,8 @@ func TestChannelSettlementAdapter_ExecuteSettlement_NoPendingEntry(t *testing.T)
 
 	adapter := adapterlnd.NewChannelSettlementAdapter(mockWatcher, mockLnd, mockChannel)
 	handle := &settlement.SettlementHandle{
-		ID:      "channel_htlc_test",
-		SwapID:  "nonexistent-swap",
+		ID:         "channel_htlc_test",
+		SwapID:     "nonexistent-swap",
 		DriverType: "HTLC_TAPROOT_CHANNEL",
 	}
 
@@ -161,6 +167,7 @@ func TestChannelSettlementAdapter_ExecuteSettlement_ZeroAmount(t *testing.T) {
 	req := settlement.SettlementRequest{
 		SwapID:      channelSwapID,
 		PaymentHash: channelPaymentHash,
+		Preimage:    channelPreimage,
 		AssetID:     testAssetID,
 		AssetAmount: decimal.NewFromFloat(0), // zero → error
 		DestAddr:    testPeerPubkey,
@@ -182,12 +189,13 @@ func TestChannelSettlementAdapter_AbortSettlement_Success(t *testing.T) {
 	// Prepare first to populate pending map
 	mockWatcher.On("DetectHTLC", mock.Anything, channelPaymentHash).
 		Return(channelTestHTLC(), nil)
-	mockLnd.On("CancelInvoice", mock.Anything, channelSwapID).Return(nil)
+	mockLnd.On("CancelInvoice", mock.Anything, channelPaymentHash).Return(nil)
 
 	adapter := adapterlnd.NewChannelSettlementAdapter(mockWatcher, mockLnd, mockChannel)
 	req := settlement.SettlementRequest{
 		SwapID:      channelSwapID,
 		PaymentHash: channelPaymentHash,
+		Preimage:    channelPreimage,
 		AssetAmount: decimal.NewFromFloat(0.01),
 		DestAddr:    testPeerPubkey,
 	}

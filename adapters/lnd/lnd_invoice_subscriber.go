@@ -2,7 +2,7 @@ package lnd
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/ThorbenD/atomic-dvp-go/settlement"
@@ -16,18 +16,18 @@ type DepositHandler interface {
 
 // LndInvoiceSubscriber listens to LND invoice updates and triggers the orchestrator
 // when an invoice is accepted (held). This is the adapter-layer component that was
-// extracted from the SwapOrchestrator in PI 28 to achieve Inversion of Control.
+// extracted from the SwapOrchestrator to achieve Inversion of Control.
 //
 // In a future chain-agnostic world, there would be equivalent subscribers for
 // EVM events (via WebSocket), Liquid block notifications, etc. — all calling
 // the same DepositHandler.OnDepositDetected().
 type LndInvoiceSubscriber struct {
-	lnd     settlement.LightningClient
+	lnd     settlement.InvoiceSubscriber
 	handler DepositHandler
 }
 
 // NewLndInvoiceSubscriber creates a subscriber that bridges LND events to the orchestrator.
-func NewLndInvoiceSubscriber(lnd settlement.LightningClient, handler DepositHandler) *LndInvoiceSubscriber {
+func NewLndInvoiceSubscriber(lnd settlement.InvoiceSubscriber, handler DepositHandler) *LndInvoiceSubscriber {
 	return &LndInvoiceSubscriber{
 		lnd:     lnd,
 		handler: handler,
@@ -42,20 +42,19 @@ func (s *LndInvoiceSubscriber) Start(ctx context.Context) {
 }
 
 func (s *LndInvoiceSubscriber) subscribeLoop(ctx context.Context) {
-	log.Println("🔌 [LndInvoiceSubscriber] Connecting to LND Invoice Stream...")
+	slog.Info("🔌 [LndInvoiceSubscriber] Connecting to LND Invoice Stream...")
 
 	for {
-		// Check context before reconnecting
 		select {
 		case <-ctx.Done():
-			log.Println("🔌 [LndInvoiceSubscriber] Context cancelled, stopping.")
+			slog.Info("🔌 [LndInvoiceSubscriber] Context cancelled, stopping.")
 			return
 		default:
 		}
 
 		updates, errors, err := s.lnd.SubscribeInvoices(ctx)
 		if err != nil {
-			log.Printf("❌ [LndInvoiceSubscriber] Failed to subscribe: %v. Retrying in 5s...", err)
+			slog.Error("❌ [LndInvoiceSubscriber] Failed to subscribe, retrying in 5s...", "err", err)
 			select {
 			case <-ctx.Done():
 				return
@@ -64,7 +63,7 @@ func (s *LndInvoiceSubscriber) subscribeLoop(ctx context.Context) {
 			}
 		}
 
-		log.Println("✅ [LndInvoiceSubscriber] Listening for Invoices...")
+		slog.Info("✅ [LndInvoiceSubscriber] Listening for Invoices...")
 
 	streamLoop:
 		for {
@@ -73,22 +72,25 @@ func (s *LndInvoiceSubscriber) subscribeLoop(ctx context.Context) {
 				return
 			case err, ok := <-errors:
 				if !ok {
-					log.Println("⚠️ [LndInvoiceSubscriber] Error stream closed.")
+					slog.Warn("⚠️ [LndInvoiceSubscriber] Error stream closed.")
 					break streamLoop
 				}
-				log.Printf("❌ [LndInvoiceSubscriber] Stream error: %v. Reconnecting...", err)
+				slog.Error("❌ [LndInvoiceSubscriber] Stream error, reconnecting...", "err", err)
 				break streamLoop
 			case update, ok := <-updates:
 				if !ok {
-					log.Println("⚠️ [LndInvoiceSubscriber] Update stream closed. Reconnecting...")
+					slog.Warn("⚠️ [LndInvoiceSubscriber] Update stream closed. Reconnecting...")
 					break streamLoop
 				}
 
-				// We care about ACCEPTED (Hold Invoice Paid)
-				if update.State == "ACCEPTED" {
+				if update.State == settlement.InvoiceStateAccepted {
 					go func(hash string) {
-						if err := s.handler.OnDepositDetected(context.Background(), hash); err != nil {
-							log.Printf("❌ [LndInvoiceSubscriber] OnDepositDetected failed for %s: %v", hash, err)
+						// Use a timeout so a slow or stuck handler cannot leak this goroutine.
+						callCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+						defer cancel()
+						if err := s.handler.OnDepositDetected(callCtx, hash); err != nil {
+							slog.Error("❌ [LndInvoiceSubscriber] OnDepositDetected failed",
+								"hash", hash, "err", err)
 						}
 					}(update.Hash)
 				}

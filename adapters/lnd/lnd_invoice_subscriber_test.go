@@ -29,7 +29,7 @@ func TestLndInvoiceSubscriber_AcceptedInvoice_CallsHandler(t *testing.T) {
 	sub.Start(ctx)
 
 	time.Sleep(20 * time.Millisecond)
-	updateCh <- &settlement.InvoiceUpdate{Hash: "abc123", State: "ACCEPTED", Amt: 50_000}
+	updateCh <- &settlement.InvoiceUpdate{Hash: "abc123", State: settlement.InvoiceStateAccepted, Amt: 50_000}
 
 	select {
 	case <-handler.done:
@@ -59,9 +59,9 @@ func TestLndInvoiceSubscriber_NonAcceptedState_IgnoredByHandler(t *testing.T) {
 	time.Sleep(20 * time.Millisecond)
 
 	// Send non-ACCEPTED states
-	updateCh <- &settlement.InvoiceUpdate{Hash: "x1", State: "OPEN"}
-	updateCh <- &settlement.InvoiceUpdate{Hash: "x2", State: "SETTLED"}
-	updateCh <- &settlement.InvoiceUpdate{Hash: "x3", State: "CANCELED"}
+	updateCh <- &settlement.InvoiceUpdate{Hash: "x1", State: settlement.InvoiceStateOpen}
+	updateCh <- &settlement.InvoiceUpdate{Hash: "x2", State: settlement.InvoiceStateSettled}
+	updateCh <- &settlement.InvoiceUpdate{Hash: "x3", State: settlement.InvoiceStateCanceled}
 
 	// Give subscriber time to process
 	time.Sleep(100 * time.Millisecond)

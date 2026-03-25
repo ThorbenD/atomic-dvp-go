@@ -52,6 +52,8 @@ type SettlementHandle struct {
 	DriverType     string    // e.g. "HTLC_LIGHTNING", "ERC3643", "LIQUID"
 	PreparedAt     time.Time // When the deposit was detected/locked
 	DepositAmtSats uint64    // Amount detected (for Lightning: satoshis)
+	Preimage       string    // Preimage needed to claim the HTLC in ExecuteSettlement
+	PaymentHash    string    // Payment hash needed to cancel the invoice in AbortSettlement
 }
 
 // SettlementResult is returned by ExecuteSettlement upon successful claim.
