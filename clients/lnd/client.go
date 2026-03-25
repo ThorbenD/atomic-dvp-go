@@ -90,7 +90,7 @@ func NewClient(cfg Config) (*Client, error) {
 	}
 
 	defaults := cfg.InvoiceDefaults
-	if defaults.ExpirySeconds == 0 {
+	if defaults == (InvoiceDefaults{}) {
 		defaults = DefaultInvoiceDefaults()
 	}
 

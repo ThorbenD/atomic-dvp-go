@@ -85,8 +85,10 @@ func (s *LndInvoiceSubscriber) subscribeLoop(ctx context.Context) {
 
 				if update.State == settlement.InvoiceStateAccepted {
 					go func(hash string) {
-						// Propagate the caller's context so cancellation is respected.
-						if err := s.handler.OnDepositDetected(ctx, hash); err != nil {
+						// Use a timeout so a slow or stuck handler cannot leak this goroutine.
+						callCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+						defer cancel()
+						if err := s.handler.OnDepositDetected(callCtx, hash); err != nil {
 							slog.Error("❌ [LndInvoiceSubscriber] OnDepositDetected failed",
 								"hash", hash, "err", err)
 						}

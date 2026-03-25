@@ -19,11 +19,18 @@ type ChannelSender interface {
 	SendAssetViaChannel(ctx context.Context, req ChannelSendRequest) (*ChannelSendResult, error)
 }
 
+// tapChannelClient is the minimal gRPC interface needed by ChannelClient.
+// Using a narrower interface (ISP) makes the client testable without depending
+// on the full tapchannelrpc.TaprootAssetChannelsClient.
+type tapChannelClient interface {
+	SendPayment(ctx context.Context, in *tapchannelrpc.SendPaymentRequest, opts ...grpc.CallOption) (tapchannelrpc.TaprootAssetChannels_SendPaymentClient, error)
+}
+
 // ChannelClient wraps the tapd gRPC channel service
 // for off-chain Taproot Asset transfers via Lightning channels.
 type ChannelClient struct {
 	conn   *grpc.ClientConn
-	client tapchannelrpc.TaprootAssetChannelsClient
+	client tapChannelClient
 }
 
 // NewChannelClient creates a new channel client for tapd.
