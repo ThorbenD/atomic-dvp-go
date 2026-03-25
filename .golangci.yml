@@ -1,0 +1,35 @@
+linters:
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - ineffassign
+    - gosec
+    - unparam
+    - misspell
+    - godot
+    - noctx
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+  gosec:
+    excludes:
+      - G115
+  godot:
+    scope: declarations
+
+issues:
+  exclude-rules:
+    - path: "_test\\.go"
+      linters:
+        - gosec
+        - unparam
+        - godot
+        - errcheck
+    - path: "examples/"
+      linters:
+        - errcheck
+        - gosec
+  max-issues-per-linter: 50
+  max-same-issues: 10
