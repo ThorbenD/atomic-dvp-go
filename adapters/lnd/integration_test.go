@@ -57,7 +57,11 @@ func lndClientFromEnv(t *testing.T) *clientlnd.Client {
 		t.Skipf("LND macaroon not found at %s — skipping integration test", macaroon)
 	}
 
-	client, err := clientlnd.NewClient(host, tlsCert, macaroon)
+	client, err := clientlnd.NewClient(clientlnd.Config{
+		Host:         host,
+		TLSCertPath:  tlsCert,
+		MacaroonPath: macaroon,
+	})
 	require.NoError(t, err, "failed to connect to LND")
 	return client
 }
